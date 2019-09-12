@@ -24,12 +24,10 @@ package flag
 
 import (
 	"flag"
-	"os"
-	"strings"
-	"time"
-
 	"github.com/Factom-Asset-Tokens/factom"
 	"github.com/posener/complete"
+	"os"
+	"strings"
 )
 
 func predictAddress(fa bool, num int, flagName, suffix string) complete.PredictFunc {
@@ -146,8 +144,4 @@ func parseWalletFlags() {
 	os.Stdout = stdout
 	os.Stderr = stderr
 
-	// We want need factom-walletd to timeout or the CLI completion will
-	// hang and never return. This is the whole reason we use AdamSLevy's
-	// fork of factom.
-	FactomClient.Walletd.Timeout = 1 * time.Second
 }

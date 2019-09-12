@@ -25,12 +25,14 @@ package flag
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/Factom-Asset-Tokens/factom"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/posener/complete"
 	"github.com/sirupsen/logrus"
 )
@@ -212,7 +214,7 @@ var (
 
 	APIAddress string
 
-	FactomClient = factom.NewClient()
+	FactomClient *factom.Client
 	NetworkID    factom.NetworkID
 
 	flagset    map[string]bool
@@ -227,10 +229,20 @@ var (
 	Username string
 	Password string
 
+	FactomTimeout time.Duration
+	WalletTimeout time.Duration
+
 	HasTLS      bool
 	TLSCertFile string
 	TLSKeyFile  string
 )
+
+type client retryablehttp.Client
+
+func (c *client) Do(req *http.Request) (*http.Response, error) {
+	innerReq, _ := retryablehttp.FromRequest(req)
+	return (*retryablehttp.Client)(c).Do(innerReq)
+}
 
 func init() {
 	flagVar(&startScanHeight, "startscanheight")
@@ -251,7 +263,7 @@ func init() {
 	flagVar(&EsAdr, "esadr")
 
 	flagVar(&FactomClient.FactomdServer, "s")
-	flagVar(&FactomClient.Factomd.Timeout, "factomdtimeout")
+	flagVar(&FactomTimeout, "factomdtimeout")
 	flagVar(&FactomClient.Factomd.User, "factomduser")
 	flagVar(&FactomClient.Factomd.Password, "factomdpassword")
 	flagVar(&NetworkID, "networkid")
@@ -259,7 +271,7 @@ func init() {
 	//flagVar(&FactomClient.Factomd.TLSEnable, "factomdtls")
 
 	flagVar(&FactomClient.WalletdServer, "w")
-	flagVar(&FactomClient.Walletd.Timeout, "wallettimeout")
+	flagVar(&WalletTimeout, "wallettimeout")
 	flagVar(&FactomClient.Walletd.User, "walletuser")
 	flagVar(&FactomClient.Walletd.Password, "walletpassword")
 	//flagVar(&FactomClient.Walletd.TLSCertFile, "walletcert")
@@ -275,6 +287,15 @@ func init() {
 	Completion.CLI.InstallName = "installcompletion"
 	Completion.CLI.UninstallName = "uninstallcompletion"
 	Completion.AddFlags(nil)
+
+	//populate clients with respective timeouts.
+	factomDoer := retryablehttp.NewClient()
+	factomDoer.HTTPClient.Timeout = FactomTimeout
+	walletDoer := retryablehttp.NewClient()
+	walletDoer.HTTPClient.Timeout = WalletTimeout
+
+	FactomClient = factom.NewClient((*client)(factomDoer), (*client)(walletDoer))
+
 }
 
 func Parse() {
@@ -296,14 +317,14 @@ func Parse() {
 	loadFromEnv(&APIAddress, "apiaddress")
 
 	loadFromEnv(&FactomClient.FactomdServer, "s")
-	loadFromEnv(&FactomClient.Factomd.Timeout, "factomdtimeout")
+	loadFromEnv(&FactomTimeout, "factomdtimeout")
 	loadFromEnv(&FactomClient.Factomd.User, "factomduser")
 	loadFromEnv(&FactomClient.Factomd.Password, "factomdpassword")
 	//loadFromEnv(&FactomClient.Factomd.TLSCertFile, "factomdcert")
 	//loadFromEnv(&FactomClient.Factomd.TLSEnable, "factomdtls")
 
 	loadFromEnv(&FactomClient.WalletdServer, "w")
-	loadFromEnv(&FactomClient.Walletd.Timeout, "walletdtimeout")
+	loadFromEnv(&WalletTimeout, "walletdtimeout")
 	loadFromEnv(&FactomClient.Walletd.User, "walletuser")
 	loadFromEnv(&FactomClient.Walletd.Password, "walletpassword")
 	//loadFromEnv(&FactomClient.Walletd.TLSCertFile, "walletcert")
@@ -342,13 +363,13 @@ func Validate() {
 	debugPrintln()
 
 	log.Debugf("-s              %#v", FactomClient.FactomdServer)
-	log.Debugf("-factomdtimeout %v ", FactomClient.Factomd.Timeout)
+	log.Debugf("-factomdtimeout %v ", FactomTimeout)
 	log.Debugf("-factomduser    %#v", FactomClient.Factomd.User)
 	log.Debugf("-factomdpass    %v ", factomdPassword)
 	debugPrintln()
 
 	log.Debugf("-w              %#v", FactomClient.WalletdServer)
-	log.Debugf("-wallettimeout %v ", FactomClient.Walletd.Timeout)
+	log.Debugf("-wallettimeout %v ", WalletTimeout)
 	log.Debugf("-walletuser    %#v", FactomClient.Walletd.User)
 	log.Debugf("-walletpass    %v ", walletdPassword)
 	debugPrintln()
