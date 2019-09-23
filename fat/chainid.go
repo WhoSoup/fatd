@@ -40,6 +40,13 @@ func ValidTokenNameIDs(nameIDs []factom.Bytes) bool {
 	return false
 }
 
+// ValidPegNetOracleIDs returns true if the nameIDs match the pattern for a
+// valid OPR chain
+func ValidPegNetOracleIDs(nameIDs []factom.Bytes, which string) bool {
+	return len(nameIDs) == 3 && string(nameIDs[0]) == "PegNet" &&
+		len(nameIDs[1]) > 0 && string(nameIDs[2]) == which
+}
+
 // NameIDs returns valid NameIDs
 func NameIDs(tokenID string, issuerChainID *factom.Bytes32) []factom.Bytes {
 	return []factom.Bytes{
