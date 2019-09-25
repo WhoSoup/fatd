@@ -26,6 +26,13 @@
 
 package pegnet
 
+import (
+	"fmt"
+
+	"crawshaw.io/sqlite"
+	"github.com/Factom-Asset-Tokens/factom"
+)
+
 const CreateTableRates = `CREATE TABLE "pn_rates" (
         "eb_seq" INTEGER NOT NULL,
         "token" TEXT,
@@ -36,3 +43,19 @@ const CreateTableRates = `CREATE TABLE "pn_rates" (
         FOREIGN KEY("eb_seq") REFERENCES "eblocks"
 );
 `
+
+func InsertRate(conn *sqlite.Conn, eb factom.EBlock, token string, value uint64) error {
+	stmt := conn.Prep(`INSERT INTO "pn_rates"
+                ("eb_seq", "token", "value") VALUES (?, ?, ?);`)
+	stmt.BindInt64(1, int64(eb.Sequence))
+	stmt.BindText(2, token)
+	stmt.BindInt64(3, int64(value))
+	if _, err := stmt.Step(); err != nil {
+		if sqlite.ErrCode(err) == sqlite.SQLITE_CONSTRAINT_UNIQUE {
+			return fmt.Errorf("Rate{%d-%s} already exists", eb.Sequence, token)
+		}
+		return err
+	}
+
+	return nil
+}

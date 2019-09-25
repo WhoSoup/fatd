@@ -142,12 +142,11 @@ var tmp grader.BlockGrader
 func (chain *Chain) PNPreEBlock(keyMR *factom.Bytes32, eb factom.EBlock) error {
 	grader.InitLX()
 	ver := uint8(1)
-	fmt.Println("pre-eblock", eb.Sequence, eb.Height)
-	if eb.Height >= 206422 {
+	if eb.Height >= 210330 {
 		ver = uint8(2)
 	}
 
-	prev, err := pegnet.GetGrade(chain.Conn, eb.Height-1)
+	prev, err := pegnet.GetGrade(chain.Conn, eb.Sequence-1)
 	if err != nil {
 		return err
 	}
@@ -160,10 +159,23 @@ func (chain *Chain) PNPreEBlock(keyMR *factom.Bytes32, eb factom.EBlock) error {
 }
 
 func (chain *Chain) PNPostEBlock(keyMR *factom.Bytes32, eb factom.EBlock) error {
-	fmt.Println("post e-block", tmp.Count())
 	graded := tmp.Grade()
 
-	fmt.Println(graded.WinnersShortHashes())
+	winners := graded.WinnersShortHashes()
+	err := pegnet.InsertGrade(chain.Conn, eb, winners)
+	if err != nil {
+		return err
+	}
+
+	oprs := graded.Winners()
+	if len(oprs) > 0 {
+		for _, t := range oprs[0].OPR.GetOrderedAssetsUint() {
+			err = pegnet.InsertRate(chain.Conn, eb, t.Name, t.Value)
+			if err != nil {
+				return err
+			}
+		}
+	}
 	//panic("")
 	return nil
 }
@@ -179,10 +191,7 @@ func (chain *Chain) ApplyPNOracle(ei int64, e factom.Entry) (tx *fat2.OraclePric
 		extids = append(extids, []byte(x))
 	}
 
-	err = tmp.AddOPR(e.Hash[:], extids, []byte(e.Content))
-	if err != nil {
-		fmt.Println(err)
-	}
+	tmp.AddOPR(e.Hash[:], extids, []byte(e.Content))
 	return
 }
 

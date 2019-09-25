@@ -31,7 +31,6 @@ import (
 	"fmt"
 
 	"crawshaw.io/sqlite"
-	"crawshaw.io/sqlite/sqlitex"
 	"github.com/Factom-Asset-Tokens/factom"
 )
 
@@ -45,10 +44,10 @@ const CreateTableGrade = `CREATE TABLE "pn_grade" (
 );
 `
 
-func InsertGrade(conn *sqlite.Conn, eb factom.EBlock, winners []string) (error, error) {
+func InsertGrade(conn *sqlite.Conn, eb factom.EBlock, winners []string) error {
 	data, err := json.Marshal(winners)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	stmt := conn.Prep(`INSERT INTO "pn_grade"
@@ -57,25 +56,33 @@ func InsertGrade(conn *sqlite.Conn, eb factom.EBlock, winners []string) (error, 
 	stmt.BindBytes(2, data)
 	if _, err := stmt.Step(); err != nil {
 		if sqlite.ErrCode(err) == sqlite.SQLITE_CONSTRAINT_UNIQUE {
-			return fmt.Errorf("Grade{%d} already exists", eb.Sequence), nil
+			return fmt.Errorf("Grade{%d} already exists", eb.Sequence)
 		}
-		return nil, err
+		return err
 	}
-	return nil, nil
+
+	return nil
 }
 
-func GetGrade(conn *sqlite.Conn, id uint32) ([]string, error) {
+func GetGrade(conn *sqlite.Conn, seq uint32) ([]string, error) {
 	stmt := conn.Prep(`SELECT "winners" FROM "pn_grade" WHERE "eb_seq" = ?;`)
-	stmt.BindInt64(1, int64(id))
-	raw, err := sqlitex.ResultText(stmt)
-	if err != nil && err.Error() == "sqlite: statement has no results" {
-		return nil, nil
-	}
+	defer stmt.Reset()
+	stmt.BindInt64(1, int64(seq))
+	hasRow, err := stmt.Step()
 	if err != nil {
 		return nil, err
 	}
+	if !hasRow {
+		return nil, nil
+	}
+
+	buf := make([]byte, 2048)
+	read := stmt.ColumnBytes(0, buf)
+	if read < 1 {
+		return nil, nil
+	}
 	var winners []string
-	err = json.Unmarshal([]byte(raw), &winners)
+	err = json.Unmarshal(buf[:read], &winners)
 	if err != nil {
 		return nil, err
 	}
