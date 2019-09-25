@@ -27,8 +27,8 @@ import (
 	"math"
 	"sync"
 
-	"github.com/Factom-Asset-Tokens/fatd/db"
 	"github.com/Factom-Asset-Tokens/factom"
+	"github.com/Factom-Asset-Tokens/fatd/db"
 	"github.com/Factom-Asset-Tokens/fatd/flag"
 )
 
@@ -203,6 +203,17 @@ func loadChains() (syncHeight uint32, err error) {
 		}
 		Chains.m[*chain.ID] = chain
 	}
+
+	// Open special PegNet twin chains
+	var oprChain Chain
+	oprChainID := factom.NewBytes32FromString("a642a8674f46696cc47fdb6b65f9c87b2a19c5ea8123b3d2f0c13b6f33a9d5ef")
+	oprChain, err = PegNetOpenOrCreate(flag.DBPath, oprChainID)
+	if err != nil {
+		fmt.Println("error opening opr chain:", err)
+		return
+	}
+	syncHeight = min(syncHeight, oprChain.SyncHeight)
+	Chains.m[*oprChain.ID] = oprChain
 
 	return
 }

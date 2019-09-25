@@ -28,6 +28,7 @@ import (
 	"os"
 	"strings"
 	"time"
+
 	//"strings"
 
 	"crawshaw.io/sqlite"
@@ -74,7 +75,9 @@ type Chain struct {
 	*sqlitex.Pool // Read Only Pool
 	Log           _log.Log
 
-	apply applyFunc
+	apply      applyFunc
+	preEBlock  eblockFunc
+	postEBlock eblockFunc
 }
 
 // dbPath must be path ending in os.Separator

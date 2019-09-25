@@ -38,6 +38,7 @@ import (
 )
 
 type applyFunc func(*Chain, int64, factom.Entry) (txErr, err error)
+type eblockFunc func(*Chain, *factom.Bytes32, factom.EBlock) error
 
 func (chain *Chain) Apply(dbKeyMR *factom.Bytes32, eb factom.EBlock) (err error) {
 	// Ensure entire EBlock is applied atomically.
@@ -56,12 +57,26 @@ func (chain *Chain) Apply(dbKeyMR *factom.Bytes32, eb factom.EBlock) (err error)
 		return
 	}
 
+	if chain.preEBlock != nil {
+		if err = chain.preEBlock(chain, dbKeyMR, eb); err != nil {
+			return
+		}
+
+	}
+
 	// Insert each entry and attempt to apply it...
 	for _, e := range eb.Entries {
 		if _, err = chain.ApplyEntry(e); err != nil {
 			return
 		}
 	}
+
+	if chain.postEBlock != nil {
+		if err = chain.postEBlock(chain, dbKeyMR, eb); err != nil {
+			return
+		}
+	}
+
 	return
 }
 

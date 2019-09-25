@@ -71,6 +71,7 @@ func (chain Chain) Validate() (err error) {
 	sess.Attach("addresses")
 	sess.Attach("nf_tokens")
 	sess.Attach("metadata")
+	sess.Attach("pn_grade")
 	defer sess.Delete()
 
 	// In case there are any changes, we want to roll back everything. We
@@ -84,7 +85,9 @@ func (chain Chain) Validate() (err error) {
                 DELETE FROM "nf_tokens";
                 DELETE FROM "nf_token_transactions";
                 DELETE FROM "eblocks";
-                DELETE FROM "entries";
+				DELETE FROM "entries";
+				DELETE FROM "pn_grade";
+				DELETE FROM "pn_rates";
                 UPDATE "metadata" SET ("init_entry_id", "num_issued") = (NULL, NULL);
                 `)
 	chain.NumIssued = 0

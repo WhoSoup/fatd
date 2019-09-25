@@ -26,13 +26,59 @@
 
 package pegnet
 
-const CreateTableGrade = `CREATE TABLE "pn_grade" (
-    "eb_seq" INTEGER NOT NULL,
-    "previous" BLOB,
-    "shorthashes" BLOB,
-    
-    UNIQUE("eb_seq")
+import (
+	"encoding/json"
+	"fmt"
 
-    FOREIGN KEY("eb_seq") REFERENCES "eblocks"
+	"crawshaw.io/sqlite"
+	"crawshaw.io/sqlite/sqlitex"
+	"github.com/Factom-Asset-Tokens/factom"
+)
+
+const CreateTableGrade = `CREATE TABLE "pn_grade" (
+        "eb_seq" INTEGER NOT NULL,
+        "winners" BLOB,
+        
+        UNIQUE("eb_seq")
+
+        FOREIGN KEY("eb_seq") REFERENCES "eblocks"
 );
 `
+
+func InsertGrade(conn *sqlite.Conn, eb factom.EBlock, winners []string) (error, error) {
+	data, err := json.Marshal(winners)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := conn.Prep(`INSERT INTO "pn_grade"
+                ("eb_seq", "winners") VALUES (?, ?);`)
+	stmt.BindInt64(1, int64(eb.Sequence))
+	stmt.BindBytes(2, data)
+	if _, err := stmt.Step(); err != nil {
+		if sqlite.ErrCode(err) == sqlite.SQLITE_CONSTRAINT_UNIQUE {
+			return fmt.Errorf("Grade{%d} already exists", eb.Sequence), nil
+		}
+		return nil, err
+	}
+	return nil, nil
+}
+
+func GetGrade(conn *sqlite.Conn, id uint32) ([]string, error) {
+	stmt := conn.Prep(`SELECT "winners" FROM "pn_grade" WHERE "eb_seq" = ?;`)
+	stmt.BindInt64(1, int64(id))
+	raw, err := sqlitex.ResultText(stmt)
+	if err != nil && err.Error() == "sqlite: statement has no results" {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var winners []string
+	err = json.Unmarshal([]byte(raw), &winners)
+	if err != nil {
+		return nil, err
+	}
+
+	return winners, nil
+}

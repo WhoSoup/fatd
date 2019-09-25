@@ -27,17 +27,37 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Factom-Asset-Tokens/fatd/db/pegnet"
+
 	"github.com/Factom-Asset-Tokens/factom"
 	"github.com/Factom-Asset-Tokens/fatd/db/addresses"
 	"github.com/Factom-Asset-Tokens/fatd/db/eblocks"
 	"github.com/Factom-Asset-Tokens/fatd/db/entries"
 	"github.com/Factom-Asset-Tokens/fatd/db/metadata"
 	"github.com/Factom-Asset-Tokens/fatd/fat"
-	"github.com/Factom-Asset-Tokens/fatd/fat/fat1"
+	"github.com/Factom-Asset-Tokens/fatd/fat/fat2"
 	_log "github.com/Factom-Asset-Tokens/fatd/log"
+	"github.com/pegnet/pegnet/modules/grader"
 )
 
-func OpenPNOracle(dbPath string,
+func OpenPegNet(dbPath, fname string) (chain Chain, err error) {
+	chain.Conn, chain.Pool, err = OpenConnPool(dbPath + fname)
+	if err != nil {
+		return
+	}
+	defer func() {
+		if err != nil {
+			chain.Close()
+		}
+	}()
+	chain.Log = _log.New("chain", strings.TrimRight(fname, dbFileExtension))
+	chain.DBFile = fname
+
+	err = chain.loadPNMetadata()
+	return
+}
+
+func NewPegNet(dbPath string,
 	dbKeyMR *factom.Bytes32, eb factom.EBlock, networkID factom.NetworkID,
 	identity factom.Identity) (chain Chain, err error) {
 	fname := eb.ChainID.String() + "/opr" + dbFileExtension
@@ -78,6 +98,7 @@ func OpenPNOracle(dbPath string,
 	chain.SyncHeight = eb.Height
 	chain.SyncDBKeyMR = dbKeyMR
 	chain.NetworkID = networkID
+	chain.Identity = identity
 	chain.Type = fat.TypeFAT2
 
 	if err = metadata.Insert(chain.Conn, chain.SyncHeight, chain.SyncDBKeyMR,
@@ -106,10 +127,62 @@ func (chain *Chain) setPNApplyFunc() {
 		_, txErr, err = chain.ApplyPNOracle(ei, e)
 		return
 	}
+	chain.preEBlock = func(chain *Chain, keyMR *factom.Bytes32, eb factom.EBlock) (err error) {
+		err = chain.PNPreEBlock(keyMR, eb)
+		return
+	}
+	chain.postEBlock = func(chain *Chain, keyMR *factom.Bytes32, eb factom.EBlock) (err error) {
+		err = chain.PNPostEBlock(keyMR, eb)
+		return
+	}
 }
 
-func (chain *Chain) ApplyPNOracle(ei int64, e factom.Entry) (tx *fat1.Transaction,
+var tmp grader.BlockGrader
+
+func (chain *Chain) PNPreEBlock(keyMR *factom.Bytes32, eb factom.EBlock) error {
+	grader.InitLX()
+	ver := uint8(1)
+	fmt.Println("pre-eblock", eb.Sequence, eb.Height)
+	if eb.Height >= 206422 {
+		ver = uint8(2)
+	}
+
+	prev, err := pegnet.GetGrade(chain.Conn, eb.Height-1)
+	if err != nil {
+		return err
+	}
+
+	tmp, err = grader.NewGrader(ver, int32(eb.Height), prev)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (chain *Chain) PNPostEBlock(keyMR *factom.Bytes32, eb factom.EBlock) error {
+	fmt.Println("post e-block", tmp.Count())
+	graded := tmp.Grade()
+
+	fmt.Println(graded.WinnersShortHashes())
+	//panic("")
+	return nil
+}
+
+func (chain *Chain) ApplyPNOracle(ei int64, e factom.Entry) (tx *fat2.OraclePriceRecord,
 	txErr, err error) {
+
+	if tmp == nil {
+		return
+	}
+	var extids [][]byte
+	for _, x := range e.ExtIDs {
+		extids = append(extids, []byte(x))
+	}
+
+	err = tmp.AddOPR(e.Hash[:], extids, []byte(e.Content))
+	if err != nil {
+		fmt.Println(err)
+	}
 	return
 }
 
@@ -145,5 +218,6 @@ func (chain *Chain) loadPNMetadata() error {
 	chain.SyncHeight, chain.NumIssued, chain.SyncDBKeyMR,
 		chain.NetworkID, chain.Identity,
 		chain.Issuance, err = metadata.Select(chain.Conn)
+	chain.Type = fat.TypeFAT2
 	return err
 }

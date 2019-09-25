@@ -27,12 +27,12 @@
 package pegnet
 
 const CreateTableRates = `CREATE TABLE "pn_rates" (
-    "eb_seq" INTEGER NOT NULL,
-    "token" TEXT,
-    "value" INTEGER,
-    
-    UNIQUE("eb_seq", "token")
+        "eb_seq" INTEGER NOT NULL,
+        "token" TEXT,
+        "value" INTEGER,
+        
+        UNIQUE("eb_seq", "token")
 
-    FOREIGN KEY("eb_seq") REFERENCES "eblocks"
+        FOREIGN KEY("eb_seq") REFERENCES "eblocks"
 );
 `
